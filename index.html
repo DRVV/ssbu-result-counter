@@ -1,0 +1,25 @@
+<html>
+
+<body>
+    <div>
+        <video id="vd"></video>
+    </div>
+</body>
+
+<script>
+    // List cameras and microphones.
+    const video = document.getElementById("vd");
+    const constraints = {audio:false, video:true};
+    navigator.mediaDevices.getUserMedia(constraints)
+        .then(
+            stream => {
+            video.srcObject = stream;
+            video.play()
+            }
+        ).catch(e =>{
+            console.log(e)
+        }
+        )
+</script>
+
+</html>
