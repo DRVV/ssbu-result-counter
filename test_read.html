@@ -1,0 +1,90 @@
+<html>
+
+<body>
+    <h2>Hello OpenCV.js</h2>
+    <p id="status">OpenCV.js is loading...</p>
+    <div>
+        <tr>
+            <td>
+                <p class="title">Red sample</p>
+                <img id="redSampleCanvas" width="480" height="270"  />
+                <div class="caption">imageSrc <input type="file" id="fileInputRed" name="file" /></div>
+            </td>
+
+            <td>
+                <p class="title">Blue sample</p>
+                <img id="blueSampleCanvas" width="480" height="270" />
+                <div class="caption">imageSrc <input type="file" id="fileInputBlue" name="file" /></div>
+            </td>
+        </tr>
+    </div>
+
+</body>
+<script>
+    function calcHist(src, channel) {
+        let srcVec = new cv.MatVector();
+        srcVec.push_back(src);
+        let accumulate = false;
+        let channels= [channel];
+        let histSize = [256];
+        let ranges = [0,255];
+        let hist = new cv.Mat();
+        let mask = new cv.Mat();
+        cv.calcHist(srcVec, channels, mask, hist, histSize, ranges, accumulate);
+        return hist
+    }
+
+    let redSampleImg = document.getElementById('redSampleCanvas');
+    let blueSampleImg = document.getElementById('blueSampleCanvas');
+    function openCvReady() {
+        cv['onRuntimeInitialized'] = () => {
+            document.getElementById('status').innerHTML = 'OpenCV.js is ready.';
+            
+            // histRed_matRed = calcHist(matRed, 2);
+            // histBlue_matRed = calcHist(matRed, 0);
+            // histRed_matBlue = calcHist(matBlue, 2);
+            // histBlue_matBlue = calcHist(matBlue, 0);
+            
+            // console.log(histRed_matRed);
+
+            let imgElementRed = document.getElementById("redSampleCanvas");
+            let imgElementBlue = document.getElementById("blueSampleCanvas");
+            let inputElementRed = document.getElementById("fileInputRed");
+            let inputElementBlue = document.getElementById("fileInputBlue");
+
+            inputElementRed.addEventListener("change", (e) => {
+                imgElementRed.src = URL.createObjectURL(e.target.files[0]);
+            }, false);
+
+            inputElementBlue.addEventListener("change", (e) => {
+                imgElementBlue.src = URL.createObjectURL(e.target.files[0]);
+            }, false);
+
+            let matRed = new cv.Mat();            
+            let histRed = new cv.Mat();
+            imgElementRed.onload = function () {
+
+                matRed = cv.imread(imgElementRed);
+                
+                histRed = calcHist(matRed, 0);
+                console.log(histRed.data32F);
+                // cv.imshow('canvasOutput', matRed);
+            };
+
+            let matBlue = new cv.Mat();
+            imgElementBlue.onload = function () {
+                
+                matBlue = cv.imread(imgElementBlue);
+                let histBlue = calcHist(matBlue, 0);
+                console.log(histBlue.data32F);
+                // cv.imshow('canvasOutput', matBlue);
+
+                console.log(cv.compareHist(histRed, histBlue, cv.HISTCMP_KL_DIV));
+            };
+
+        };
+    }
+</script>
+<!-- <script src="https://docs.opencv.org/4.5.5/opencv.js" type="text/javascript" onload="openCvReady()"></script> -->
+<script src="scripts/opencv.js" type="text/javascript" onload="openCvReady()"></script>
+</html>

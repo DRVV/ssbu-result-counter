@@ -8,15 +8,38 @@
         <tr>
             <td>
                 <p style="text-align:center">WebRTC capturing OBS virtual camera</p>
-                <video id="videoInput" width="400" height="300"></video>
+                <video id="videoInput" width="480" height="270"></video>
             </td>
             <td>
                 <p style="text-align:center">opencv.js processing the stream realtime</p>
-                <canvas id="canvasOutput" width="400" height="300"></canvas>
-            </td>
+                <canvas id="canvasOutput" width="480" height="270"></canvas>
+            </td>            
         </tr>
         <tr>
             <p id="errorMessage">message here</p>
+        </tr>
+        <tr>
+            <td>
+                <p class="title">counter red:</p>
+                <p id="counterRed">0</p>
+            </td>
+            <td>
+                <p class="title">counter red:</p>
+                <p id="counterBlue">0</p>
+            </td>
+        </tr>
+    
+        <tr>
+            <td>
+                <p class="title">Red sample</p>
+                <img id="redRefImg" width="480" height="270"  />
+                <div class="caption">imageSrc <input type="file" id="redRefInput" name="file" /></div>
+            </td>
+            <td>
+                <p class="title">Blue sample</p>
+                <img id="blueRefImg" width="480" height="270" />
+                <div class="caption">imageSrc <input type="file" id="blueRefInput" name="file" /></div>
+            </td>
         </tr>
     </table>
 </body>
@@ -28,6 +51,29 @@
     let src = false;
     let dst = false;
     let cap = false;
+
+    let x_max = video.width
+    let y_max = video.height
+
+    let CV_COLOR_BLUE = 0;
+    let CV_COLOR_GREEN = 1;
+    let CV_COLOR_RED = 2;
+    
+    let redRefImg = document.getElementById('redRefImg');
+    let redRefInput = document.getElementById('redRefInput');
+    
+    let blueRefImg = document.getElementById('blueRefImg');
+    let blueRefInput = document.getElementById('blueRefInput');
+
+    let redRef = false; // cv.Mat();
+    let blueRef = false; //cv.Mat();
+
+    let redHist = false; //cv.Mat();
+    let blueHist = false; //cv.Mat();
+
+    let THRESH_BLUE = 3000.0;
+    let THRESH_RED = 1000.0;
+
     navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         .then(function (stream) {
             video.srcObject = stream;
@@ -41,27 +87,126 @@
             console.log("An error occurred! " + err);
         });
 
+
+    function handleImgSelected(imgTag, inputElm) {
+        inputElm.addEventListener("change", (e) => {
+            imgTag.src = URL.createObjectURL(e.target.files[0]);
+        }, false);
+    }
+
+    function handleOnload(refTag, refMat, hist, channel) {
+        refTag.onload = function() {
+            refMat = cv.imread(refTag);
+            hist = calcHist(refMat, channel);
+        }
+    }
+
+    function sayDetected(colorInt) {
+        switch (colorInt) {
+            case CV_COLOR_BLUE:
+                let elmBlue = document.getElementById('counterBlue')
+                let cntBlue = elmBlue.innerHTML;
+                cntBlue = parseInt(cntBlue);
+                cntBlue = cntBlue + 1;
+                elmBlue.innerHTML = cntBlue;
+                break;
+
+            case CV_COLOR_RED:
+                let elmRed = document.getElementById('counterRed')
+                let cntRed = elmRed.innerHTML;
+                cntRed = parseInt(cntRed);
+                cntRed = cntRed + 1;
+                elmRed.innerHTML = cntRed;
+                break;
+        }        
+    }
+
     function openCvReady() {
         cv['onRuntimeInitialized'] = () => {
-            src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
-            dst = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+            // set handlers
+            handleImgSelected(redRefImg, redRefInput);
+            handleImgSelected(blueRefImg, blueRefInput);
+
+            // instantiate object after cv is ready
+            redRef = new cv.Mat();
+            redHist = new cv.Mat();
+            blueRef = new cv.Mat();
+            blueHist = new cv.Mat();
+
+            // handleOnload(redRefImg, redRef, redHist, CV_COLOR_RED);
+            // handleOnload(blueRefImg, blueRef, blueHist, CV_COLOR_BLUE);
+
+            redRefImg.onload = function() {
+                redRef = cv.imread(redRefImg);
+                redHist = calcHist(redRef, CV_COLOR_RED);
+            }
+
+            blueRefImg.onload = function() {
+                blueRef = cv.imread(blueRefImg);
+                blueHist = calcHist(blueRef, CV_COLOR_BLUE);
+            }
+
+            // start capturing video
+            src = new cv.Mat(y_max, x_max, cv.CV_8UC4);
+            dst = new cv.Mat()
             cap = new cv.VideoCapture(video);
-            setTimeout(processVideo, 0)
+            setTimeout(processVideo, 10000);
         };
     }
 
+    function calcHist(src, channel) {
+        let srcVec = new cv.MatVector();
+        srcVec.push_back(src);
+        let accumulate = false;
+        let channels= [channel];
+        let histSize = [16];
+        let ranges = [0,255];
+        let hist = new cv.Mat();
+        let mask = new cv.Mat();
+        cv.calcHist(srcVec, channels, mask, hist, histSize, ranges, accumulate);
+        return hist
+    }    
+
     function processVideo() {
         const FPS = 30;
+        const DELAY_ON_DETECT = 5 * 1000; // 5 sec
+        let delay_on_detect = 0;
         try {
             let begin = Date.now();
             // start processing.
             cap.read(src);
             src.copyTo(dst);
-            cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
 
+            // find histograms for red and blue channels, respectively.
+            let currentFrameHistRed = calcHist(dst, CV_COLOR_RED);
+            let currentFrameHistBlue = calcHist(dst, CV_COLOR_BLUE);
+
+            let metricsRed = cv.compareHist(currentFrameHistRed, redHist, cv.HISTCMP_KL_DIV);
+            let metricsBlue = cv.compareHist(currentFrameHistBlue, blueHist, cv.HISTCMP_KL_DIV);
+            
+            console.log('metricsRed: ', metricsRed);
+            console.log('metricsBlue: ', metricsBlue);
+
+            if (metricsRed <= THRESH_RED && metricsBlue > THRESH_BLUE) {
+                console.log('Detect RED!');
+                sayDetected(CV_COLOR_RED);
+                delay_on_detect = DELAY_ON_DETECT;
+            }
+            
+            if (metricsRed > THRESH_RED && metricsBlue <= THRESH_BLUE) {
+                console.log('Detect BLUE!');
+                sayDetected(CV_COLOR_BLUE);
+                delay_on_detect = DELAY_ON_DETECT;
+            }
+
+            if (metricsRed < THRESH_RED && metricsBlue < THRESH_BLUE) {
+                console.log("Detected both. Bad threshold?");
+            }
+        
             cv.imshow('canvasOutput', dst);
+
             // schedule the next one.
-            let delay = 1000 / FPS - (Date.now() - begin);
+            let delay = 1000 / FPS - (Date.now() - begin) + delay_on_detect;
             setTimeout(processVideo, delay);
 
         } catch (err) {
@@ -71,4 +216,5 @@
 
 </script>
 <script src="https://docs.opencv.org/4.5.5/opencv.js" type="text/javascript" onload="openCvReady()"></script>
+
 </html>
